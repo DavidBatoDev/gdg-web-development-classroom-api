@@ -5,19 +5,30 @@ from google_auth_oauthlib.flow import InstalledAppFlow
 from google.auth.transport.requests import Request
 import os
 import pickle
+from werkzeug.serving import WSGIRequestHandler
+import socket
+import re
+
+WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
 # Initialize Flask app
 app = Flask(__name__)
+app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 CORS(app)
 
+socket.setdefaulttimeout(300)  # Set timeout to 300 seconds
 # Google Classroom API Scopes
 SCOPES = [
-    'https://www.googleapis.com/auth/spreadsheets',
-    'https://www.googleapis.com/auth/classroom.rosters.readonly',
-    'https://www.googleapis.com/auth/classroom.courses.readonly',
-    'https://www.googleapis.com/auth/classroom.profile.emails'
+    'https://www.googleapis.com/auth/spreadsheets',  # For Sheets API
+    'https://www.googleapis.com/auth/classroom.rosters.readonly',  # For student data
+    'https://www.googleapis.com/auth/classroom.profile.emails',  # For student emails
+    'https://www.googleapis.com/auth/classroom.courses.readonly',  # For course data
+    'https://www.googleapis.com/auth/classroom.coursework.me',  # Access coursework
+    'https://www.googleapis.com/auth/classroom.coursework.students'  # Access student submissions
 ]
 
+
+######################## Utility Functions ########################
 def get_google_service(api_name, api_version):
     """Authenticate and return the Google API service."""
     creds = None
@@ -34,7 +45,33 @@ def get_google_service(api_name, api_version):
             pickle.dump(creds, token)
     return build(api_name, api_version, credentials=creds)
 
+def extract_attachments(attachments):
+    """
+    Extract links or file references from attachments.
+    """
+    extracted = []
+    for attachment in attachments:
+        if 'driveFile' in attachment:
+            extracted.append({
+                'type': 'driveFile',
+                'title': attachment['driveFile']['title'],
+                'link': attachment['driveFile']['alternateLink']
+            })
+        elif 'link' in attachment:
+            extracted.append({
+                'type': 'link',
+                'title': attachment['link'].get('title', 'Untitled Link'),
+                'link': attachment['link']['url']
+            })
+        elif 'form' in attachment:
+            extracted.append({
+                'type': 'form',
+                'title': attachment['form']['title'],
+                'link': attachment['form']['formUrl']
+            })
+    return extracted
 
+######################## API Endpoints ########################
 @app.route('/courses', methods=['GET'])
 def get_courses():
     """
@@ -58,7 +95,6 @@ def get_courses():
         return jsonify(courses)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 
 @app.route('/students', methods=['GET'])
@@ -110,46 +146,6 @@ def get_all_students():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/leaderboard', methods=['GET'])
-def get_leaderboard():
-    """
-    Fetch leaderboard for a specific course, accumulating grades for all assignments.
-
-    Query Parameter:
-    - course_id: The ID of the course to fetch the leaderboard from.
-
-    Example: /leaderboard?course_id=<course_id>
-    """
-    course_id = request.args.get('course_id')
-    if not course_id:
-        return jsonify({'error': 'course_id query parameter is required'}), 400
-
-    service = get_google_service()
-    leaderboard = {}
-
-    try:
-        coursework = service.courses().courseWork().list(courseId=course_id).execute()
-        for work in coursework.get('courseWork', []):
-            assignment_id = work['id']
-            submissions = service.courses().courseWork().studentSubmissions().list(
-                courseId=course_id, courseWorkId=assignment_id).execute()
-
-            for submission in submissions.get('studentSubmissions', []):
-                student_id = submission['userId']
-                if 'assignedGrade' in submission:
-                    grade = submission['assignedGrade']
-                    if student_id not in leaderboard:
-                        leaderboard[student_id] = 0
-                    leaderboard[student_id] += grade
-
-        # Convert leaderboard dictionary to a sorted list
-        sorted_leaderboard = sorted(
-            leaderboard.items(), key=lambda x: x[1], reverse=True
-        )
-        return jsonify(sorted_leaderboard)
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
 @app.route('/submissions', methods=['GET'])
 def get_submissions_with_attachments():
     """
@@ -170,7 +166,7 @@ def get_submissions_with_attachments():
     if not course_id or not assignment_id:
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
 
-    service = get_google_service()
+    service = get_google_service('classroom', 'v1') 
     all_submissions = []
     student_map = {}  # Map of userId to student name and email
     page_token = None
@@ -226,9 +222,6 @@ def get_submissions_with_attachments():
         return jsonify({'error': str(e)}), 500
 
 
-
-    
-
 @app.route('/assignments', methods=['GET'])
 def get_assignments():
     """
@@ -244,7 +237,7 @@ def get_assignments():
     if not course_id:
         return jsonify({'error': 'course_id query parameter is required'}), 400
 
-    service = get_google_service()
+    service = get_google_service('classroom', 'v1') 
 
     try:
         # Fetch all assignments for the course
@@ -265,36 +258,6 @@ def get_assignments():
         return jsonify({'error': str(e)}), 500
 
 
-
-def extract_attachments(attachments):
-    """
-    Extract links or file references from attachments.
-    """
-    extracted = []
-    for attachment in attachments:
-        if 'driveFile' in attachment:
-            extracted.append({
-                'type': 'driveFile',
-                'title': attachment['driveFile']['title'],
-                'link': attachment['driveFile']['alternateLink']
-            })
-        elif 'link' in attachment:
-            extracted.append({
-                'type': 'link',
-                'title': attachment['link'].get('title', 'Untitled Link'),
-                'link': attachment['link']['url']
-            })
-        elif 'form' in attachment:
-            extracted.append({
-                'type': 'form',
-                'title': attachment['form']['title'],
-                'link': attachment['form']['formUrl']
-            })
-    return extracted
-
-
-# Push Spreadsheet Data to Google Classroom
-# Update download_students to push to Google Sheets
 @app.route('/push_students_to_sheet', methods=['POST'])
 def push_students_to_sheet():
     """
@@ -307,13 +270,12 @@ def push_students_to_sheet():
     Example: /push_students_to_sheet?course_id=<course_id>&spreadsheet_id=<spreadsheet_id>
     """
     course_id = request.args.get('course_id')
-    spreadsheet_id = request.args.get('spreadsheet_id')  # Spreadsheet ID is required
-
+    spreadsheet_id = request.args.get('spreadsheet_id') 
     if not course_id or not spreadsheet_id:
         return jsonify({'error': 'course_id and spreadsheet_id query parameters are required'}), 400
 
-    classroom_service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
-    sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
+    classroom_service = get_google_service('classroom', 'v1')  
+    sheets_service = get_google_service('sheets', 'v4')  
     all_students = []
     page_token = None
 
@@ -383,6 +345,93 @@ def push_students_to_sheet():
         return jsonify({'message': 'Student data successfully pushed to the spreadsheet with ranks.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/grades', methods=['POST'])
+def update_student_grades():
+    """
+    Update grades of all students for a specific assignment in a course.
+    Add a new column for assignment state and update points accordingly.
+
+    Query Parameters:
+    - course_id: The ID of the course.
+    - assignment_id: The ID of the assignment.
+
+    Example: /grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
+    """
+    course_id = request.args.get('course_id')
+    assignment_id = request.args.get('assignment_id')
+
+    if not course_id or not assignment_id:
+        return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
+
+    service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
+    sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
+
+    try:
+        # Fetch the assignment details to get the assignment name
+        assignment = service.courses().courseWork().get(
+            courseId=course_id, id=assignment_id
+        ).execute()
+        assignment_name = assignment['title']
+        cleaned_name = re.sub(r'[^\w\s]', '', assignment_name)  # Remove special characters
+        cleaned_name = cleaned_name.replace(' ', '_')  # Replace spaces with underscores
+        truncated_name = cleaned_name[:50]  # Limit to 50 characters
+        state_column_name = f"{truncated_name}_state"
+
+        # Fetch existing spreadsheet data
+        spreadsheet_id = request.args.get('spreadsheet_id')
+        sheet_data = sheets_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1:Z'
+        ).execute()
+
+        rows = sheet_data.get('values', [])
+        headers = rows[0] if rows else []
+        data = rows[1:] if len(rows) > 1 else []
+
+        # Ensure the new state column exists
+        if state_column_name not in headers:
+            headers.append(state_column_name)
+
+        state_column_index = headers.index(state_column_name)
+        points_column_index = headers.index('points') if 'points' in headers else len(headers)
+
+        # Update rows with grades and states
+        updated_data = []
+        for row in data:
+            user_id = row[0]
+            # Ensure the row has enough columns for the state column
+            while len(row) <= state_column_index:
+                row.append('')
+
+            # Fetch the student's submission
+            submission = service.courses().courseWork().studentSubmissions().list(
+                courseId=course_id, courseWorkId=assignment_id, userId=user_id
+            ).execute()
+
+            if submission:
+                state = row[state_column_index]
+                if state != 'Done':
+                    grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
+                    if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
+                        row[points_column_index] = int(row[points_column_index]) + grade
+                        row[state_column_index] = 'Done'
+
+            updated_data.append(row)
+
+        # Update spreadsheet with new data
+        sheets_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1',
+            valueInputOption='RAW',
+            body={'values': [headers] + updated_data}
+        ).execute()
+
+        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 
 
 
