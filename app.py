@@ -96,7 +96,6 @@ def get_courses():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/students', methods=['GET'])
 def get_all_students():
     """
@@ -221,7 +220,6 @@ def get_submissions_with_attachments():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/assignments', methods=['GET'])
 def get_assignments():
     """
@@ -256,7 +254,6 @@ def get_assignments():
         return jsonify(assignments)
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/push_students_to_sheet', methods=['POST'])
 def push_students_to_sheet():
@@ -346,7 +343,6 @@ def push_students_to_sheet():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/grades', methods=['POST'])
 def update_student_grades():
     """
@@ -412,11 +408,11 @@ def update_student_grades():
 
             if submission:
                 state = row[state_column_index]
-                if state != 'Done':
+                if state == None:
                     grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
                     if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
                         row[points_column_index] = int(row[points_column_index]) + grade
-                        row[state_column_index] = 'Done'
+                        row[state_column_index] = grade
 
             updated_data.append(row)
 
@@ -432,8 +428,118 @@ def update_student_grades():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+@app.route('/push_attendance', methods=['POST'])
+def push_attendance():
+    """
+    Push attendance grades from another sheet to Sheet1.
+    Creates a new column in Sheet1 named after the source sheet,
+    and adds points based on email matches.
 
+    Query Parameters:
+    - spreadsheet_id: The ID of the Google Spreadsheet
+    - sheet_name: Name of the sheet containing attendance data
 
+    Example: /push_attendance?spreadsheet_id=<spreadsheet_id>&sheet_name=<sheet_name>
+    """
+    spreadsheet_id = request.args.get('spreadsheet_id')
+    sheet_name = request.args.get('sheet_name')
+
+    if not spreadsheet_id or not sheet_name:
+        return jsonify({'error': 'spreadsheet_id and sheet_name query parameters are required'}), 400
+
+    sheets_service = get_google_service('sheets', 'v4')
+
+    try:
+        # Fetch existing data from Sheet1
+        sheet1_data = sheets_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1:Z'
+        ).execute()
+
+        sheet1_rows = sheet1_data.get('values', [])
+        if not sheet1_rows:
+            return jsonify({'error': 'Sheet1 is empty'}), 400
+
+        sheet1_headers = sheet1_rows[0]
+        
+        # Check if attendance column already exists
+        if sheet_name in sheet1_headers:
+            return jsonify({'error': f'Column {sheet_name} already exists in Sheet1'}), 400
+
+        # Find email column index in Sheet1
+        try:
+            sheet1_email_index = sheet1_headers.index('email')
+        except ValueError:
+            return jsonify({'error': 'Email column not found in Sheet1'}), 400
+
+        points_index = sheet1_headers.index('points')
+
+        # Fetch data from attendance sheet
+        attendance_data = sheets_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range=f'{sheet_name}!A1:Z'
+        ).execute()
+
+        attendance_rows = attendance_data.get('values', [])
+        if not attendance_rows:
+            return jsonify({'error': f'Sheet {sheet_name} is empty'}), 400
+
+        attendance_headers = attendance_rows[0]
+
+        # Find email/username column in attendance sheet
+        attendance_email_index = None
+        for possible_header in ['email', 'Email', 'USERNAME', 'Username']:
+            try:
+                attendance_email_index = attendance_headers.index(possible_header)
+                break
+            except ValueError:
+                continue
+
+        if attendance_email_index is None:
+            return jsonify({'error': 'Email/Username column not found in attendance sheet'}), 400
+
+        # Add new column header to Sheet1
+        sheet1_headers.append(sheet_name)
+        new_column_index = len(sheet1_headers) - 1
+
+        # Create a set of emails from attendance sheet for faster lookup
+        attendance_emails = {row[attendance_email_index].lower().strip() 
+                           for row in attendance_rows[1:] if len(row) > attendance_email_index}
+
+        # Update Sheet1 data
+        updated_rows = [sheet1_headers]  # Start with headers
+        for row in sheet1_rows[1:]:  # Skip header row
+            while len(row) < len(sheet1_headers):
+                row.append('')  # Pad row with empty values if needed
+            
+            email = row[sheet1_email_index].lower().strip()
+            if email in attendance_emails:
+                # Add 20 points
+                current_points = int(row[points_index]) if row[points_index] else 0
+                row[points_index] = str(current_points + 20)
+                # Mark attendance
+                row[new_column_index] = '20'
+            else:
+                row[new_column_index] = ''
+                
+            updated_rows.append(row)
+
+        # Update the entire Sheet1
+        sheets_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1',
+            valueInputOption='RAW',
+            body={'values': updated_rows}
+        ).execute()
+
+        return jsonify({
+            'message': f'Successfully updated attendance from {sheet_name}',
+            'points_added': '20 points added for each matching email',
+            'matches_found': sum(1 for row in updated_rows[1:] if row[new_column_index] == '20')
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 if __name__ == '__main__':
