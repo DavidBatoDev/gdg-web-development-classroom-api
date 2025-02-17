@@ -11,6 +11,7 @@ import re
 import tempfile
 import json
 from flask import session, redirect, url_for
+from flask_session import Session
 
 WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
@@ -21,6 +22,8 @@ app = Flask(__name__)
 # Ensure secret key is set
 app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
+app.config['SESSION_TYPE'] = 'filesystem'  # For simple deployments
+Session(app)
 CORS(app)
 
 socket.setdefaulttimeout(300)  # Set timeout to 300 seconds
