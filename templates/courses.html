@@ -13,6 +13,17 @@
                onkeyup="filterCourses()">
     </div>
 
+    <div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden">
+        <div class="bg-white p-4 rounded-lg shadow-lg flex items-center space-x-2">
+            <svg class="animate-spin h-6 w-6 text-blue-500" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0116 0H4z"></path>
+            </svg>
+            <span class="text-lg font-semibold">Processing, please wait...</span>
+        </div>
+    </div>
+
+
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="coursesGrid">
         {% for course in courses %}
         <div class="course-card bg-white p-6 rounded-lg shadow-md">
@@ -74,6 +85,10 @@ function pushToSpreadsheet(courseId) {
     // Prompt for spreadsheet ID
     const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
     if (!spreadsheetId) return;
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    // Show loading screen
+    loadingOverlay.classList.remove('hidden');
 
     fetch(`/push_students_to_sheet?course_id=${courseId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
@@ -85,6 +100,8 @@ function pushToSpreadsheet(courseId) {
     .catch(error => {
         alert('Error: ' + error);
         console.log(error);
+    }).finally(() => {
+        loadingOverlay.classList.add('hidden');
     });
 }
 </script>

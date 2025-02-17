@@ -83,7 +83,11 @@ function updateSpreadsheet() {
 function pushAttendance() {
     const spreadsheetId = document.getElementById('spreadsheetId').value;
     const sheetName = document.getElementById('sheetName').value;
-    
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    // Show loading screen
+    loadingOverlay.classList.remove('hidden');
+
     fetch(`/push_attendance?spreadsheet_id=${spreadsheetId}&sheet_name=${sheetName}`, {
         method: 'POST'
     })
@@ -92,6 +96,9 @@ function pushAttendance() {
     .catch(error => {
         console.log(error);
         alert('Error: ' + error);
+    }).finally(() => {
+        // Hide loading screen after the request completes
+        loadingOverlay.classList.add('hidden');
     });
 }
 
@@ -113,6 +120,11 @@ function loadAssignments() {
     const courseId = document.getElementById('courseSelect').value;
     if (!courseId) return;
 
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    // Show loading screen
+    loadingOverlay.classList.remove('hidden');
+
     fetch(`/assignments?course_id=${courseId}`)
         .then(response => response.json())
         .then(assignments => {
@@ -124,6 +136,9 @@ function loadAssignments() {
                 option.textContent = assignment.title;
                 select.appendChild(option);
             });
+        }).finally(() => {
+            // Hide loading screen after the request completes
+            loadingOverlay.classList.add('hidden');
         });
 }
 
