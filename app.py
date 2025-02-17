@@ -8,11 +8,18 @@ import pickle
 from werkzeug.serving import WSGIRequestHandler
 import socket
 import re
+import tempfile
+import json
+from flask import session, redirect, url_for
 
 WSGIRequestHandler.protocol_version = "HTTP/1.1"
 
+
 # Initialize Flask app
 app = Flask(__name__)
+
+# Ensure secret key is set
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-key-change-in-production')
 app.config['JSONIFY_PRETTYPRINT_REGULAR'] = False
 CORS(app)
 
@@ -29,22 +36,34 @@ SCOPES = [
 
 ######################## Utility Functions ########################
 def get_google_service(api_name, api_version):
-    """Authenticate and return the Google API service."""
+    """Authenticate and return the Google API service using session-stored credentials."""
     creds = None
-    if os.path.exists('token.pickle'):
-        with open('token.pickle', 'rb') as token:
-            creds = pickle.load(token)
-    if not creds or not creds.valid:
+    
+    # Try to get credentials from session
+    if 'token_pickle' in session:
+        try:
+            token_data = bytes.fromhex(session['token_pickle'])
+            creds = pickle.loads(token_data)
+        except Exception:
+            session.pop('token_pickle')
+    
+    # If credentials need refresh
+    if creds and not creds.valid:
         if creds and creds.expired and creds.refresh_token:
-            creds.refresh(Request())
-        else:             
-            if not os.path.exists('credentials.json'):
-                raise FileNotFoundError('credentials.json file not found. Please upload it on the "Manage Credentials" page.')
-                
-            flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
-            creds = flow.run_local_server(port=0)
-        with open('token.pickle', 'wb') as token:
-            pickle.dump(creds, token)
+            try:
+                creds.refresh(Request())
+                # Update session with refreshed credentials
+                session['token_pickle'] = pickle.dumps(creds).hex()
+            except Exception:
+                session.pop('token_pickle')
+                creds = None
+    
+    # No valid credentials found, redirect to upload/auth
+    if not creds:
+        # We can't do a redirect here since this might be called from various places
+        # Instead, we'll raise an exception that can be caught by the route handlers
+        raise Exception("No valid credentials. Please upload credentials.json first in Manage Credentials Page.")
+    
     return build(api_name, api_version, credentials=creds)
 
 def extract_attachments(attachments):
@@ -97,11 +116,16 @@ def home():
 @app.route('/manage-courses')
 def manage_courses():
     """Page to view and manage courses"""
-    service = get_google_service('classroom', 'v1')
-    courses = service.courses().list().execute().get('courses', [])
-        # Filter courses by name
-    filtered_courses = [course for course in courses if course['name'] == "GDG `25 Web Development"]
-    return render_template('courses.html', courses=filtered_courses)
+    try:
+        service = get_google_service('classroom', 'v1')
+        courses = service.courses().list().execute().get('courses', [])
+        # Filter courses by name if needed
+        filtered_courses = [course for course in courses if course['name'] == "GDG `25 Web Development"]
+        return render_template('courses.html', courses=filtered_courses)
+    except Exception as e:
+        if 'credentials' in str(e).lower():
+            return redirect(url_for('manage_credentials'))
+        return f"Error: {str(e)}"
 
 @app.route('/manage-students/<course_id>')
 def manage_students(course_id):
@@ -150,10 +174,9 @@ def manage_spreadsheet():
     """Page to manage Google Spreadsheet operations"""
     return render_template('spreadsheet.html')
 
-
 @app.route('/credentials', methods=['GET', 'POST'])
 def manage_credentials():
-    """Handle credentials.json file upload and replacement"""
+    """Handle credentials.json file upload for each user"""
     message = None
     if request.method == 'POST':
         # Check if a file was uploaded
@@ -171,25 +194,30 @@ def manage_credentials():
         # Check if file is allowed and secure
         if file and allowed_file(file.filename):
             try:
-                # Backup existing credentials if they exist
-                if os.path.exists('credentials.json'):
-                    backup_name = 'credentials.json.backup'
-                    os.rename('credentials.json', backup_name)
+                # Instead of saving to disk, we'll store in session
+                file_content = file.read().decode('utf-8')
                 
-                # Save the new credentials
-                filename = 'credentials.json'
-                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                # Validate that it's proper JSON and has expected structure
+                try:
+                    creds_json = json.loads(file_content)
+                    if 'installed' not in creds_json and 'web' not in creds_json:
+                        raise ValueError("Invalid credentials format")
+                except Exception as e:
+                    message = {'type': 'error', 'text': f'Invalid credentials format: {str(e)}'}
+                    return render_template('credentials.html', message=message)
                 
-                # Remove the pickle file to force re-authentication
-                if os.path.exists('token.pickle'):
-                    os.remove('token.pickle')
+                # Store in session
+                session['credentials_json'] = file_content
                 
-                message = {'type': 'success', 'text': 'Credentials updated successfully. Please restart the application.'}
+                # Remove any existing token
+                if 'token_pickle' in session:
+                    session.pop('token_pickle')
+                
+                message = {'type': 'success', 'text': 'Credentials uploaded successfully. Please authenticate the application.'}
+                return redirect(url_for('authenticate_google'))
+                
             except Exception as e:
-                message = {'type': 'error', 'text': f'Error saving file: {str(e)}'}
-                # Restore backup if it exists
-                if os.path.exists('credentials.json.backup'):
-                    os.rename('credentials.json.backup', 'credentials.json')
+                message = {'type': 'error', 'text': f'Error processing file: {str(e)}'}
         else:
             message = {'type': 'error', 'text': 'Invalid file type. Please upload a .json file'}
     
@@ -680,6 +708,76 @@ def push_attendance():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+@app.route('/authenticate_google')
+def authenticate_google():
+    """Authenticate with Google using stored credentials"""
+    if 'credentials_json' not in session:
+        return redirect(url_for('manage_credentials'))
+    
+    # Create a temporary credentials.json file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+        temp_file.write(session['credentials_json'])
+        temp_file_path = temp_file.name
+    
+    try:
+        # Set up the OAuth flow
+        flow = InstalledAppFlow.from_client_secrets_file(temp_file_path, SCOPES)
+        # This will redirect to Google's auth page automatically
+        flow.redirect_uri = url_for('oauth2callback', _external=True)
+        authorization_url, state = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true',
+            prompt='consent'
+        )
+        
+        # Store the state in the session
+        session['state'] = state
+        
+        # Clean up
+        os.unlink(temp_file_path)
+        
+        return redirect(authorization_url)
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+        return f"Error during authentication: {str(e)}"
+
+@app.route('/oauth2callback')
+def oauth2callback():
+    """Handle the OAuth 2.0 callback from Google"""
+    if 'credentials_json' not in session:
+        return redirect(url_for('manage_credentials'))
+    
+    # Create temporary credentials file
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+        temp_file.write(session['credentials_json'])
+        temp_file_path = temp_file.name
+    
+    try:
+        # Set up flow with the saved state
+        flow = InstalledAppFlow.from_client_secrets_file(
+            temp_file_path, SCOPES, state=session.get('state'))
+        flow.redirect_uri = url_for('oauth2callback', _external=True)
+        
+        # Exchange authorization code for credentials
+        flow.fetch_token(authorization_response=request.url)
+        
+        # Store credentials in session
+        credentials = flow.credentials
+        session['token_pickle'] = pickle.dumps(credentials).hex()
+        
+        # Clean up
+        os.unlink(temp_file_path)
+        
+        return redirect(url_for('home'))
+    except Exception as e:
+        # Clean up on error
+        if os.path.exists(temp_file_path):
+            os.unlink(temp_file_path)
+        return f"Error completing authentication: {str(e)}"
+
 
 if __name__ == '__main__':
     app.run(debug=True)
