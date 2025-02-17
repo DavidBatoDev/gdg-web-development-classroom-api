@@ -522,11 +522,13 @@ def update_student_grades():
     Query Parameters:
     - course_id: The ID of the course.
     - assignment_id: The ID of the assignment.
+    - spreadsheet_id: the ID of the spreadsheet
 
-    Example: /grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
+    Example: /update-grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
     """
     course_id = request.args.get('course_id')
     assignment_id = request.args.get('assignment_id')
+    spreadsheet_id = request.args.get('spreadsheet_id')
 
     if not course_id or not assignment_id:
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
@@ -546,7 +548,6 @@ def update_student_grades():
         state_column_name = f"{truncated_name}_state"
 
         # Fetch existing spreadsheet data
-        spreadsheet_id = request.args.get('spreadsheet_id')
         sheet_data = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A1:Z'
@@ -559,6 +560,8 @@ def update_student_grades():
         # Ensure the new state column exists
         if state_column_name not in headers:
             headers.append(state_column_name)
+
+        return jsonify({'message': 'debugging'}), 200
 
         state_column_index = headers.index(state_column_name)
         points_column_index = headers.index('points') if 'points' in headers else len(headers)
@@ -578,11 +581,11 @@ def update_student_grades():
 
             if submission:
                 state = row[state_column_index]
-                if state != 'Done':
+                if not state:
                     grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
                     if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
                         row[points_column_index] = int(row[points_column_index]) + grade
-                        row[state_column_index] = 'Done'
+                        row[state_column_index] = grade
 
             updated_data.append(row)
 
