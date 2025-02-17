@@ -565,15 +565,15 @@ def update_student_grades():
 
         state_column_index = headers.index(state_column_name)
         points_column_index = headers.index('points') if 'points' in headers else len(headers)
-
-        return jsonify({'message': 'debugging'}), 200
     
         # Update rows with grades and states
         updated_data = []
         for row in data:
             user_id = row[0]
-            # Ensure the row has enough columns for the state column
-            while len(row) <= state_column_index:
+            
+            # Ensure the row has enough columns for both state and points columns
+            required_length = max(state_column_index, points_column_index) + 1
+            while len(row) < required_length:
                 row.append('')
 
             # Fetch the student's submission
@@ -585,8 +585,12 @@ def update_student_grades():
                 state = row[state_column_index]
                 if not state:
                     grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
-                    if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
-                        row[points_column_index] = int(row[points_column_index]) + grade
+                    if grade > 0:  # Only add grade if grade > 0
+                        try:
+                            current_points = int(row[points_column_index])
+                        except ValueError:
+                            current_points = 0
+                        row[points_column_index] = current_points + grade
                         row[state_column_index] = grade
 
             updated_data.append(row)
