@@ -19,6 +19,18 @@
             </div>
         </div>
 
+        <!-- Loading Overlay -->
+        <div id="loadingOverlay" class="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center hidden">
+            <div class="bg-white p-4 rounded-lg shadow-lg flex items-center space-x-2">
+                <svg class="animate-spin h-6 w-6 text-blue-500" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0116 0H4z"></path>
+                </svg>
+                <span class="text-lg font-semibold">Processing, please wait...</span>
+            </div>
+        </div>
+
+
         <!-- Spreadsheet Controls -->
         <div class="space-y-4">
             <div class="flex items-center space-x-4">
@@ -119,22 +131,33 @@ function updateGrades() {
     const spreadsheetId = document.getElementById('spreadsheetId').value;
     const courseId = document.getElementById('courseSelect').value;
     const assignmentId = document.getElementById('assignmentSelect').value;
+    const loadingOverlay = document.getElementById('loadingOverlay');
+
+    // Show loading screen
+    loadingOverlay.classList.remove('hidden');
 
     fetch(`/update-grades?course_id=${courseId}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
     })
     .then(response => {
         if (!response.ok) {
-            return response.text().then(text => { throw new Error(text); }); // Ensure error is properly caught
+            return response.text().then(text => { throw new Error(text); });
         }
         return response.json();
     })
-    .then(data => alert(data.message))
+    .then(data => {
+        alert(data.message);
+    })
     .catch(error => {
         console.error('Error:', error);
         alert('Error updating grades: ' + error.message);
+    })
+    .finally(() => {
+        // Hide loading screen after the request completes
+        loadingOverlay.classList.add('hidden');
     });
 }
+
 
 
 // Load courses when page loads
