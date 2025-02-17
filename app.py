@@ -561,8 +561,6 @@ def update_student_grades():
         if state_column_name not in headers:
             headers.append(state_column_name)
 
-        return jsonify({'message': 'debugging'}), 200
-
         state_column_index = headers.index(state_column_name)
         points_column_index = headers.index('points') if 'points' in headers else len(headers)
 
@@ -588,6 +586,8 @@ def update_student_grades():
                         row[state_column_index] = grade
 
             updated_data.append(row)
+        
+        return jsonify({'message': 'debugging'}), 200
 
         # Update spreadsheet with new data
         sheets_service.spreadsheets().values().update(
