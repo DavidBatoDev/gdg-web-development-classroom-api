@@ -536,6 +536,8 @@ def update_student_grades():
     service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
     sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
 
+    return jsonify({'message': f'{course_id}, {assignment_id}, {spreadsheet_id} 1'}), 400
+
     try:
         # Fetch the assignment details to get the assignment name
         assignment = service.courses().courseWork().get(
@@ -595,7 +597,7 @@ def update_student_grades():
             body={'values': [headers] + updated_data}
         ).execute()
 
-        return jsonify({'message': f'Grades updated'})
+        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
