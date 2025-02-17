@@ -534,68 +534,70 @@ def update_student_grades():
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
 
     service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
-    sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service 400
+    sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
 
-    # Fetch the assignment details to get the assignment name
-    assignment = service.courses().courseWork().get(
-        courseId=course_id, id=assignment_id
-    ).execute()
-    assignment_name = assignment['title']
-    cleaned_name = re.sub(r'[^\w\s]', '', assignment_name)  # Remove special characters
-    cleaned_name = cleaned_name.replace(' ', '_')  # Replace spaces with underscores
-    truncated_name = cleaned_name[:50]  # Limit to 50 characters
-    state_column_name = f"{truncated_name}_state"
+    try:
+        # Fetch the assignment details to get the assignment name
+        assignment = service.courses().courseWork().get(
+            courseId=course_id, id=assignment_id
+        ).execute()
+        assignment_name = assignment['title']
+        cleaned_name = re.sub(r'[^\w\s]', '', assignment_name)  # Remove special characters
+        cleaned_name = cleaned_name.replace(' ', '_')  # Replace spaces with underscores
+        truncated_name = cleaned_name[:50]  # Limit to 50 characters
+        state_column_name = f"{truncated_name}_state"
 
-    # Fetch existing spreadsheet data
-    sheet_data = sheets_service.spreadsheets().values().get(
-        spreadsheetId=spreadsheet_id,
-        range='Sheet1!A1:Z'
-    ).execute()
-
-    rows = sheet_data.get('values', [])
-    headers = rows[0] if rows else []
-    data = rows[1:] if len(rows) > 1 else []
-
-    # Ensure the new state column exists
-    if state_column_name not in headers:
-        headers.append(state_column_name)
-
-    state_column_index = headers.index(state_column_name)
-    points_column_index = headers.index('points') if 'points' in headers else len(headers)
-
-    # Update rows with grades and states
-    updated_data = []
-    for row in data:
-        user_id = row[0]
-        # Ensure the row has enough columns for the state column
-        while len(row) <= state_column_index:
-            row.append('')
-
-        # Fetch the student's submission
-        submission = service.courses().courseWork().studentSubmissions().list(
-            courseId=course_id, courseWorkId=assignment_id, userId=user_id
+        # Fetch existing spreadsheet data
+        sheet_data = sheets_service.spreadsheets().values().get(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1:Z'
         ).execute()
 
-        if submission:
-            state = row[state_column_index]
-            if state == None:
-                grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
-                if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
-                    row[points_column_index] = int(row[points_column_index]) + grade
-                    row[state_column_index] = grade
+        rows = sheet_data.get('values', [])
+        headers = rows[0] if rows else []
+        data = rows[1:] if len(rows) > 1 else []
 
-        updated_data.append(row)
+        # Ensure the new state column exists
+        if state_column_name not in headers:
+            headers.append(state_column_name)
 
-    # Update spreadsheet with new data
-    sheets_service.spreadsheets().values().update(
-        spreadsheetId=spreadsheet_id,
-        range='Sheet1!A1',
-        valueInputOption='RAW',
-        body={'values': [headers] + updated_data}
-    ).execute()
+        state_column_index = headers.index(state_column_name)
+        points_column_index = headers.index('points') if 'points' in headers else len(headers)
 
-    return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+        # Update rows with grades and states
+        updated_data = []
+        for row in data:
+            user_id = row[0]
+            # Ensure the row has enough columns for the state column
+            while len(row) <= state_column_index:
+                row.append('')
 
+            # Fetch the student's submission
+            submission = service.courses().courseWork().studentSubmissions().list(
+                courseId=course_id, courseWorkId=assignment_id, userId=user_id
+            ).execute()
+
+            if submission:
+                state = row[state_column_index]
+                if not state:
+                    grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
+                    if grade > 0:  # Only add grade and set "Done" if grade is greater than 0
+                        current_points = int(row[points_column_index]) if row[points_column_index].isdigit() else 0
+                        row[points_column_index] = current_points + grade
+
+            updated_data.append(row)
+
+        # Update spreadsheet with new data
+        sheets_service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range='Sheet1!A1',
+            valueInputOption='RAW',
+            body={'values': [headers] + updated_data}
+        ).execute()
+
+        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/push_attendance', methods=['POST'])
 def push_attendance():
