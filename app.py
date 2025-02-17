@@ -594,9 +594,16 @@ def update_student_grades():
             body={'values': [headers] + updated_data}
         ).execute()
 
-        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+        response = jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+        response.headers.set('Content-Type', 'application/json')
+        return response
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        import traceback
+        error_details = traceback.format_exc()
+        print(f"Error updating grades: {e}\n{error_details}")
+        response = jsonify({'error': str(e)})
+        response.headers.set('Content-Type', 'application/json')
+        return response, 500
 
 @app.route('/push_attendance', methods=['POST'])
 def push_attendance():
