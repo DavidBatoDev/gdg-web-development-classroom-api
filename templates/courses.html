@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Courses - Classroom Manager{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="flex justify-between items-center">
+        <h1 class="text-2xl font-bold">Your Courses</h1>
+        <input type="text" 
+               id="courseSearch" 
+               placeholder="Search courses..." 
+               class="p-2 border rounded"
+               onkeyup="filterCourses()">
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="coursesGrid">
+        {% for course in courses %}
+        <div class="course-card bg-white p-6 rounded-lg shadow-md">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-xl font-bold">{{ course.name }}</h2>
+                <span class="px-2 py-1 text-sm rounded {% if course.courseState == 'ACTIVE' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-800{% endif %}">
+                    {{ course.courseState }}
+                </span>
+            </div>
+            
+            <p class="text-gray-600 mb-4">{{ course.description or 'No description available' }}</p>
+            
+            <div class="space-y-2">
+                <a href="/manage-students/{{ course.id }}" 
+                   class="block w-full text-center bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    View Students
+                </a>
+                
+                <a href="/manage-assignments/{{ course.id }}" 
+                   class="block w-full text-center bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    View Assignments
+                </a>
+
+                <button onclick="pushToSpreadsheet('{{ course.id }}')"
+                        class="w-full bg-purple-500 text-white px-4 py-2 rounded hover:bg-purple-600">
+                    Push Students to Spreadsheet
+                </button>
+            </div>
+
+            <div class="mt-4 text-sm text-gray-500">
+                <p>Section: {{ course.section or 'N/A' }}</p>
+                <p>Room: {{ course.room or 'N/A' }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterCourses() {
+    const searchTerm = document.getElementById('courseSearch').value.toLowerCase();
+    const cards = document.getElementsByClassName('course-card');
+    
+    Array.from(cards).forEach(card => {
+        const title = card.querySelector('h2').textContent.toLowerCase();
+        const description = card.querySelector('p').textContent.toLowerCase();
+        
+        if (title.includes(searchTerm) || description.includes(searchTerm)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function pushToSpreadsheet(courseId) {
+    // Prompt for spreadsheet ID
+    const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
+    if (!spreadsheetId) return;
+
+    fetch(`/push_students_to_sheet?course_id=${courseId}&spreadsheet_id=${spreadsheetId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+</script>
+{% endblock %}

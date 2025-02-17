@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Assignments - {{ course.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold">{{ course.name }}</h1>
+            <p class="text-gray-600">Assignments</p>
+        </div>
+        <input type="text" 
+               id="assignmentSearch" 
+               placeholder="Search assignments..." 
+               class="p-2 border rounded"
+               onkeyup="filterAssignments()">
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" id="assignmentsGrid">
+        {% for assignment in assignments %}
+        <div class="assignment-card bg-white p-6 rounded-lg shadow-md">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-xl font-bold">{{ assignment.title }}</h2>
+                {% if assignment.dueDate %}
+                <span class="px-2 py-1 text-sm rounded bg-blue-100 text-blue-800">
+                    Due: {{ assignment.dueDate.day }}/{{ assignment.dueDate.month }}/{{ assignment.dueDate.year }}
+                </span>
+                {% endif %}
+            </div>
+            
+            <!-- <p class="text-gray-600 mb-4">{{ assignment.description or 'No description available' }}</p> -->
+            
+            <div class="space-y-2">
+                <a href="/view-submissions/{{ course.id }}/{{ assignment.id }}" 
+                   class="block w-full text-center bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    View Submissions
+                </a>
+                
+                <button onclick="updateGrades('{{ assignment.id }}')"
+                        class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                    Update Grades
+                </button>
+
+                <a href="{{ assignment.alternateLink }}" 
+                   target="_blank"
+                   class="block w-full text-center bg-gray-500 text-white px-4 py-2 rounded hover:bg-gray-600">
+                    Open in Classroom
+                </a>
+            </div>
+
+            <div class="mt-4 text-sm text-gray-500">
+                <p>Created: {{ assignment.creationTime[:10] }}</p>
+                <p>Max Points: {{ assignment.maxPoints or 'Not specified' }}</p>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterAssignments() {
+    const searchTerm = document.getElementById('assignmentSearch').value.toLowerCase();
+    const cards = document.getElementsByClassName('assignment-card');
+    
+    Array.from(cards).forEach(card => {
+        const title = card.querySelector('h2').textContent.toLowerCase();
+        const description = card.querySelector('p').textContent.toLowerCase();
+        
+        if (title.includes(searchTerm) || description.includes(searchTerm)) {
+            card.style.display = '';
+        } else {
+            card.style.display = 'none';
+        }
+    });
+}
+
+function updateGrades(assignmentId) {
+    const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
+    if (!spreadsheetId) return;
+
+    fetch(`/grades?course_id={{ course.id }}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+</script>
+{% endblock %}

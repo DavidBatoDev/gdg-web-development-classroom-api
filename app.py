@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, request, Response
+from flask import Flask, jsonify, request, Response, render_template
 from flask_cors import CORS
 from googleapiclient.discovery import build
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -27,7 +27,6 @@ SCOPES = [
     'https://www.googleapis.com/auth/classroom.coursework.students'  # Access student submissions
 ]
 
-
 ######################## Utility Functions ########################
 def get_google_service(api_name, api_version):
     """Authenticate and return the Google API service."""
@@ -38,7 +37,10 @@ def get_google_service(api_name, api_version):
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
-        else:
+        else:             
+            if not os.path.exists('credentials.json'):
+                raise FileNotFoundError('credentials.json file not found. Please upload it on the "Manage Credentials" page.')
+                
             flow = InstalledAppFlow.from_client_secrets_file('credentials.json', SCOPES)
             creds = flow.run_local_server(port=0)
         with open('token.pickle', 'wb') as token:
@@ -70,6 +72,129 @@ def extract_attachments(attachments):
                 'link': attachment['form']['formUrl']
             })
     return extracted
+
+# Add these imports to your existing imports
+from werkzeug.utils import secure_filename
+import os
+
+# For File Upload
+UPLOAD_FOLDER = '.'  # Current directory where app.py is located
+ALLOWED_EXTENSIONS = {'json'}
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+def allowed_file(filename):
+    return '.' in filename and \
+           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+
+
+####################### FRONTEND ROUTES #######################
+# Frontend Routes
+@app.route('/')
+def home():
+    """Home page with navigation to different features"""
+    return render_template('home.html')
+
+@app.route('/manage-courses')
+def manage_courses():
+    """Page to view and manage courses"""
+    service = get_google_service('classroom', 'v1')
+    courses = service.courses().list().execute().get('courses', [])
+        # Filter courses by name
+    filtered_courses = [course for course in courses if course['name'] == "GDG `25 Web Development"]
+    return render_template('courses.html', courses=filtered_courses)
+
+@app.route('/manage-students/<course_id>')
+def manage_students(course_id):
+    """Page to view and manage students in a course"""
+    service = get_google_service('classroom', 'v1')
+    # Get course details
+    course = service.courses().get(id=course_id).execute()
+    
+    # Get students with pagination
+    students = []
+    page_token = None
+    while True:
+        students_response = service.courses().students().list(courseId=course_id, pageToken=page_token).execute()
+        students.extend(students_response.get('students', []))
+        page_token = students_response.get('nextPageToken')
+        if not page_token:
+            break
+    
+    return render_template('students.html', course=course, students=students)
+
+@app.route('/manage-assignments/<course_id>')
+def manage_assignments(course_id):
+    """Page to view and manage assignments"""
+    service = get_google_service('classroom', 'v1')
+    course = service.courses().get(id=course_id).execute()
+    assignments = service.courses().courseWork().list(courseId=course_id).execute().get('courseWork', [])
+    return render_template('assignments.html', course=course, assignments=assignments)
+
+@app.route('/view-submissions/<course_id>/<assignment_id>')
+def view_submissions(course_id, assignment_id):
+    """Page to view submissions for an assignment"""
+    service = get_google_service('classroom', 'v1')
+    course = service.courses().get(id=course_id).execute()
+    assignment = service.courses().courseWork().get(courseId=course_id, id=assignment_id).execute()
+    submissions = service.courses().courseWork().studentSubmissions().list(
+        courseId=course_id,
+        courseWorkId=assignment_id
+    ).execute().get('studentSubmissions', [])
+    return render_template('submissions.html', 
+                         course=course, 
+                         assignment=assignment, 
+                         submissions=submissions)
+
+@app.route('/manage-spreadsheet')
+def manage_spreadsheet():
+    """Page to manage Google Spreadsheet operations"""
+    return render_template('spreadsheet.html')
+
+
+@app.route('/credentials', methods=['GET', 'POST'])
+def manage_credentials():
+    """Handle credentials.json file upload and replacement"""
+    message = None
+    if request.method == 'POST':
+        # Check if a file was uploaded
+        if 'credentials' not in request.files:
+            message = {'type': 'error', 'text': 'No file selected'}
+            return render_template('credentials.html', message=message)
+        
+        file = request.files['credentials']
+        
+        # Check if user selected a file
+        if file.filename == '':
+            message = {'type': 'error', 'text': 'No file selected'}
+            return render_template('credentials.html', message=message)
+        
+        # Check if file is allowed and secure
+        if file and allowed_file(file.filename):
+            try:
+                # Backup existing credentials if they exist
+                if os.path.exists('credentials.json'):
+                    backup_name = 'credentials.json.backup'
+                    os.rename('credentials.json', backup_name)
+                
+                # Save the new credentials
+                filename = 'credentials.json'
+                file.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
+                
+                # Remove the pickle file to force re-authentication
+                if os.path.exists('token.pickle'):
+                    os.remove('token.pickle')
+                
+                message = {'type': 'success', 'text': 'Credentials updated successfully. Please restart the application.'}
+            except Exception as e:
+                message = {'type': 'error', 'text': f'Error saving file: {str(e)}'}
+                # Restore backup if it exists
+                if os.path.exists('credentials.json.backup'):
+                    os.rename('credentials.json.backup', 'credentials.json')
+        else:
+            message = {'type': 'error', 'text': 'Invalid file type. Please upload a .json file'}
+    
+    return render_template('credentials.html', message=message)
+
 
 ######################## API Endpoints ########################
 @app.route('/courses', methods=['GET'])
@@ -154,7 +279,7 @@ def get_submissions_with_attachments():
     Query Parameters:
     - course_id: The ID of the course.
     - assignment_id: The ID of the assignment.
-    - state (optional): Filter submissions by their state (e.g., TURNED_IN, CREATED).
+    - state (optional): Filter submissions by their state (e.g., TURNED_IN, CREATED, NEW).
 
     Example: /submissions?course_id=<course_id>&assignment_id=<assignment_id>&state=TURNED_IN
     """
@@ -555,7 +680,6 @@ def push_attendance():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
-
 
 if __name__ == '__main__':
     app.run(debug=True)

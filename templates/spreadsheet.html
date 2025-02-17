@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+
+{% block title %}Spreadsheet Dashboard{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-2xl font-bold mb-4">Student Data Spreadsheet</h2>
+        
+        <!-- Embedded Google Spreadsheet with improved height and scrolling -->
+        <div class="w-full mb-8 border rounded-lg overflow-hidden">
+            <div class="overflow-auto" style="height: 50vh; min-height: 600px;">
+                <iframe 
+                    id="spreadsheetFrame"
+                    class="w-full h-full border-0"
+                    src=""
+                    scrolling="yes">
+                </iframe>
+            </div>
+        </div>
+
+        <!-- Spreadsheet Controls -->
+        <div class="space-y-4">
+            <div class="flex items-center space-x-4">
+                <input type="text" id="spreadsheetId" placeholder="Enter Spreadsheet ID" 
+                       class="flex-1 p-2 border rounded">
+                <button onclick="updateSpreadsheet()" 
+                        class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+                    Update Spreadsheet
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="space-y-2">
+                    <h3 class="font-semibold">Push Attendance</h3>
+                    <input type="text" id="sheetName" placeholder="Sheet Name" 
+                           class="w-full p-2 border rounded">
+                    <button onclick="pushAttendance()" 
+                            class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        Push Attendance Data
+                    </button>
+                </div>
+
+                <div class="space-y-2">
+                    <h3 class="font-semibold">Update Grades</h3>
+                    <select id="courseSelect" class="w-full p-2 border rounded">
+                        <option value="">Select Course</option>
+                    </select>
+                    <select id="assignmentSelect" class="w-full p-2 border rounded">
+                        <option value="">Select Assignment</option>
+                    </select>
+                    <button onclick="updateGrades()" 
+                            class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                        Update Grades
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function updateSpreadsheet() {
+    const spreadsheetId = document.getElementById('spreadsheetId').value;
+    const iframe = document.getElementById('spreadsheetFrame');
+    iframe.src = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/edit?embedded=true`;
+}
+
+function pushAttendance() {
+    const spreadsheetId = document.getElementById('spreadsheetId').value;
+    const sheetName = document.getElementById('sheetName').value;
+    
+    fetch(`/push_attendance?spreadsheet_id=${spreadsheetId}&sheet_name=${sheetName}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => alert(data.message))
+    .catch(error => alert('Error: ' + error));
+}
+
+function loadCourses() {
+    fetch('/courses')
+        .then(response => response.json())
+        .then(courses => {
+            const select = document.getElementById('courseSelect');
+            courses.forEach(course => {
+                const option = document.createElement('option');
+                option.value = course.id;
+                option.textContent = course.name;
+                select.appendChild(option);
+            });
+        });
+}
+
+function loadAssignments() {
+    const courseId = document.getElementById('courseSelect').value;
+    if (!courseId) return;
+
+    fetch(`/assignments?course_id=${courseId}`)
+        .then(response => response.json())
+        .then(assignments => {
+            const select = document.getElementById('assignmentSelect');
+            select.innerHTML = '<option value="">Select Assignment</option>';
+            assignments.forEach(assignment => {
+                const option = document.createElement('option');
+                option.value = assignment.id;
+                option.textContent = assignment.title;
+                select.appendChild(option);
+            });
+        });
+}
+
+function updateGrades() {
+    const spreadsheetId = document.getElementById('spreadsheetId').value;
+    const courseId = document.getElementById('courseSelect').value;
+    const assignmentId = document.getElementById('assignmentSelect').value;
+
+    fetch(`/grades?course_id=${courseId}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => alert(data.message))
+    .catch(error => alert('Error: ' + error));
+}
+
+// Load courses when page loads
+document.addEventListener('DOMContentLoaded', loadCourses);
+document.getElementById('courseSelect').addEventListener('change', loadAssignments);
+</script>
+{% endblock %}

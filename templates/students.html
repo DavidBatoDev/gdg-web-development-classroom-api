@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Students - {{ course.name }}{% endblock %}
+
+{% block content %}
+<div class="space-y-8">
+    <div class="flex justify-between items-center">
+        <div>
+            <h1 class="text-2xl font-bold">{{ course.name }}</h1>
+            <p class="text-gray-600">Student Roster</p>
+        </div>
+        <div class="flex gap-4">
+            <input type="text" 
+                   id="studentSearch" 
+                   placeholder="Search students..." 
+                   class="p-2 border rounded"
+                   onkeyup="filterStudents()">
+            <button onclick="exportToSpreadsheet()"
+                    class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
+                Export to Spreadsheet
+            </button>
+        </div>
+    </div>
+
+    <div class="bg-white rounded-lg shadow-md overflow-hidden">
+        <table class="min-w-full">
+            <thead class="bg-gray-50">
+                <tr>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Name</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
+                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                </tr>
+            </thead>
+            <tbody class="bg-white divide-y divide-gray-200" id="studentTableBody">
+                {% for student in students %}
+                <tr class="student-row">
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm font-medium text-gray-900">
+                            {{ student.profile.name.fullName }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <div class="text-sm text-gray-500">
+                            {{ student.profile.emailAddress }}
+                        </div>
+                    </td>
+                    <td class="px-6 py-4 whitespace-nowrap">
+                        <span class="px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">
+                            Active
+                        </span>
+                    </td>
+
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function filterStudents() {
+    const searchTerm = document.getElementById('studentSearch').value.toLowerCase();
+    const rows = document.getElementsByClassName('student-row');
+    
+    Array.from(rows).forEach(row => {
+        const name = row.querySelector('.text-gray-900').textContent.toLowerCase();
+        const email = row.querySelector('.text-gray-500').textContent.toLowerCase();
+        
+        if (name.includes(searchTerm) || email.includes(searchTerm)) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
+
+function exportToSpreadsheet() {
+    const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
+    if (!spreadsheetId) return;
+
+    fetch(`/push_students_to_sheet?course_id={{ course.id }}&spreadsheet_id=${spreadsheetId}`, {
+        method: 'POST'
+    })
+    .then(response => response.json())
+    .then(data => {
+        alert(data.message);
+    })
+    .catch(error => {
+        alert('Error: ' + error);
+    });
+}
+</script>
+{% endblock %}

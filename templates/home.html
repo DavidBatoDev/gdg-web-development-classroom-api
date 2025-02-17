@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Classroom Manager{% endblock %}
+
+{% block content %}
+<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-xl font-bold mb-4">Manage Credentials</h2>
+        <p class="text-gray-600 mb-4">Manage Google API Credentials for Permission and Authentication</p>
+        <a href="/credentials" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Manage Credentials File
+        </a>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-xl font-bold mb-4">Manage Course</h2>
+        <p class="text-gray-600 mb-4">View and manage your Google Classroom courses</p>
+        <a href="/manage-courses" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            View Courses
+        </a>
+    </div>
+
+    <div class="bg-white p-6 rounded-lg shadow-md">
+        <h2 class="text-xl font-bold mb-4">Spreadsheet Dashboard</h2>
+        <p class="text-gray-600 mb-4">View and manage student data in Google Sheets Directly for more interactivity</p>
+        <a href="/manage-spreadsheet" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">
+            Open Dashboard
+        </a>
+    </div>
+</div>
+{% endblock %}
