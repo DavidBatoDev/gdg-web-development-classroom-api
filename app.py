@@ -513,7 +513,7 @@ def push_students_to_sheet():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-@app.route('/grades', methods=['POST'])
+@app.route('/update-grades', methods=['POST'])
 def update_student_grades():
     """
     Update grades of all students for a specific assignment in a course.
@@ -523,7 +523,7 @@ def update_student_grades():
     - course_id: The ID of the course.
     - assignment_id: The ID of the assignment.
 
-    Example: /grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
+    Example: /update-grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
     """
     course_id = request.args.get('course_id')
     assignment_id = request.args.get('assignment_id')
@@ -594,16 +594,9 @@ def update_student_grades():
             body={'values': [headers] + updated_data}
         ).execute()
 
-        response = jsonify({'message': f'Grades updated and {state_column_name} column added.'})
-        response.headers.set('Content-Type', 'application/json')
-        return response
+        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
     except Exception as e:
-        import traceback
-        error_details = traceback.format_exc()
-        print(f"Error updating grades: {e}\n{error_details}")
-        response = jsonify({'error': str(e)})
-        response.headers.set('Content-Type', 'application/json')
-        return response, 500
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/push_attendance', methods=['POST'])
 def push_attendance():

@@ -120,7 +120,7 @@ function updateGrades() {
     const courseId = document.getElementById('courseSelect').value;
     const assignmentId = document.getElementById('assignmentSelect').value;
 
-    fetch(`/grades?course_id=${courseId}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
+    fetch(`/update-grades?course_id=${courseId}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
     })
     .then(response => response.json())

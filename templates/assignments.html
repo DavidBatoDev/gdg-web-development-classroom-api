@@ -80,7 +80,7 @@ function updateGrades(assignmentId, courseId) {
     const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
     if (!spreadsheetId) return;
 
-    fetch(`/grades?course_id=${ courseId }&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
+    fetch(`/update-grades?course_id=${ courseId }&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
     })
     .then(response => {
