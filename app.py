@@ -181,11 +181,25 @@ def manage_spreadsheet():
 def manage_credentials():
     """Handle credentials.json file upload for each user"""
     message = None
+
+    message = None
+    
+    # Create a dictionary to track file presence
+    files = {}
+    
+    # Check if credentials.json is in session
+    if 'credentials_json' in session:
+        files['credentials.json'] = True
+    
+    # Check if token.pickle is in session
+    if 'token_pickle' in session:
+        files['token.pickle'] = True
+    
     if request.method == 'POST':
         # Check if a file was uploaded
         if 'credentials' not in request.files:
             message = {'type': 'error', 'text': 'No file selected'}
-            return render_template('credentials.html', message=message)
+            return render_template('credentials.html', message=message, files=files)
         
         file = request.files['credentials']
         
