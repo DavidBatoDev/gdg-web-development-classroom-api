@@ -123,13 +123,19 @@ function updateGrades() {
     fetch(`/update-grades?course_id=${courseId}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
     })
-    .then(response => response.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text); }); // Ensure error is properly caught
+        }
+        return response.json();
+    })
     .then(data => alert(data.message))
     .catch(error => {
-        console.log(error);
-        alert('Error: ' + error);
+        console.error('Error:', error);
+        alert('Error updating grades: ' + error.message);
     });
 }
+
 
 // Load courses when page loads
 document.addEventListener('DOMContentLoaded', loadCourses);

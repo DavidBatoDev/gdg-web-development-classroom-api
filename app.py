@@ -604,7 +604,7 @@ def update_student_grades():
             body=update_body
         ).execute()
 
-        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+        return jsonify({'message': f'Grades updated and {state_column_name} column added.'}), 200
     except Exception as e:
         app.logger.error("Error in update-grades: %s", str(e))
         return jsonify({'error': str(e)}), 500
