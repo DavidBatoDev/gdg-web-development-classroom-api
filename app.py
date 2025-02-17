@@ -522,11 +522,16 @@ def update_student_grades():
     Query Parameters:
     - course_id: The ID of the course.
     - assignment_id: The ID of the assignment.
+    - spreadsheet_id: the ID of the spreadsheet
 
     Example: /update-grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
     """
     course_id = request.args.get('course_id')
     assignment_id = request.args.get('assignment_id')
+    spreadsheet_id = request.args.get('spreadsheet_id')
+
+    return jsonify({'message': f'{course_id}, {assignment_id}, {spreadsheet_id}'}), 400
+
 
     if not course_id or not assignment_id:
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
@@ -546,7 +551,6 @@ def update_student_grades():
         state_column_name = f"{truncated_name}_state"
 
         # Fetch existing spreadsheet data
-        spreadsheet_id = request.args.get('spreadsheet_id')
         sheet_data = sheets_service.spreadsheets().values().get(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A1:Z'
