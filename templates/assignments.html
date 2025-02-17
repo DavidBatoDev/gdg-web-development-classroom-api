@@ -36,7 +36,7 @@
                     View Submissions
                 </a>
                 
-                <button onclick="updateGrades('{{ assignment.id }}')"
+                <button onclick="updateGrades('{{ assignment.id }}', '{{ course.id }}')"
                         class="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">
                     Update Grades
                 </button>
@@ -76,14 +76,22 @@ function filterAssignments() {
     });
 }
 
-function updateGrades(assignmentId) {
+function updateGrades(assignmentId, courseId) {
     const spreadsheetId = prompt('Please enter the Google Spreadsheet ID:');
     if (!spreadsheetId) return;
 
-    fetch(`/grades?course_id={{ course.id }}&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
+    fetch(`/grades?course_id=${ courseId }&assignment_id=${assignmentId}&spreadsheet_id=${spreadsheetId}`, {
         method: 'POST'
     })
-    .then(response => response.json())
+    .then(response => {
+        console.log(response);
+        console.log("{{ course.id }}");
+        if (response.headers.get('content-type').includes('application/json')) {
+            return response.json();
+        } else {
+            throw new Error('Received non-JSON response from server');
+        }
+    })
     .then(data => {
         alert(data.message);
     })
