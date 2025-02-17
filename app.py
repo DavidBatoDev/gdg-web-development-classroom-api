@@ -522,7 +522,7 @@ def update_student_grades():
     Query Parameters:
     - course_id: The ID of the course.
     - assignment_id: The ID of the assignment.
-    - spreadsheet_id: the ID of the spreadsheet
+    - spreadsheet_id: The ID of the spreadsheet
 
     Example: /update-grades?course_id=<course_id>&assignment_id=<assignment_id>&spreadsheet_id=<spreadsheet_id>
     """
@@ -533,10 +533,10 @@ def update_student_grades():
     if not course_id or not assignment_id:
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
 
-    service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
-    sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
-
     try:
+        service = get_google_service('classroom', 'v1')  # Initialize Classroom API service
+        sheets_service = get_google_service('sheets', 'v4')  # Initialize Sheets API service
+
         # Fetch the assignment details to get the assignment name
         assignment = service.courses().courseWork().get(
             courseId=course_id, id=assignment_id
@@ -561,20 +561,17 @@ def update_student_grades():
         if state_column_name not in headers:
             headers.append(state_column_name)
 
-
-
         state_column_index = headers.index(state_column_name)
         points_column_index = headers.index('points') if 'points' in headers else len(headers)
-    
+
         # Update rows with grades and states
         updated_data = []
         for row in data:
-            user_id = row[0]
-            
-            # Ensure the row has enough columns for both state and points columns
-            required_length = max(state_column_index, points_column_index) + 1
-            while len(row) < required_length:
+            # Ensure the row has enough columns for the state column
+            while len(row) <= state_column_index:
                 row.append('')
+
+            user_id = row[0]
 
             # Fetch the student's submission
             submission = service.courses().courseWork().studentSubmissions().list(
@@ -582,29 +579,34 @@ def update_student_grades():
             ).execute()
 
             if submission:
-                state = row[state_column_index]
-                if not state:
-                    grade = submission.get('studentSubmissions', [{}])[0].get('assignedGrade', 0)
-                    if grade > 0:  # Only add grade if grade > 0
-                        try:
-                            current_points = int(row[points_column_index])
-                        except ValueError:
-                            current_points = 0
-                        row[points_column_index] = current_points + grade
-                        row[state_column_index] = grade
-
+                submissions_list = submission.get('studentSubmissions', [])
+                if submissions_list:
+                    # Check if the state cell is empty (or falsy)
+                    if not row[state_column_index]:
+                        grade = submissions_list[0].get('assignedGrade', 0)
+                        if grade > 0:
+                            # Safely convert the points cell to an integer
+                            try:
+                                current_points = int(row[points_column_index]) if row[points_column_index].strip() != '' else 0
+                            except (ValueError, IndexError):
+                                current_points = 0
+                            # Update the points and state columns
+                            row[points_column_index] = str(current_points + grade)
+                            row[state_column_index] = str(grade)
             updated_data.append(row)
 
         # Update spreadsheet with new data
+        update_body = {'values': [headers] + updated_data}
         sheets_service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range='Sheet1!A1',
             valueInputOption='RAW',
-            body={'values': [headers] + updated_data}
+            body=update_body
         ).execute()
 
         return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
     except Exception as e:
+        app.logger.error("Error in update-grades: %s", str(e))
         return jsonify({'error': str(e)}), 500
 
 @app.route('/push_attendance', methods=['POST'])
