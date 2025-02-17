@@ -530,9 +530,6 @@ def update_student_grades():
     assignment_id = request.args.get('assignment_id')
     spreadsheet_id = request.args.get('spreadsheet_id')
 
-    return jsonify({'message': f'{course_id}, {assignment_id}, {spreadsheet_id}'}), 400
-
-
     if not course_id or not assignment_id:
         return jsonify({'error': 'course_id and assignment_id query parameters are required'}), 400
 
@@ -598,7 +595,7 @@ def update_student_grades():
             body={'values': [headers] + updated_data}
         ).execute()
 
-        return jsonify({'message': f'Grades updated and {state_column_name} column added.'})
+        return jsonify({'message': f'Grades updated'})
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
