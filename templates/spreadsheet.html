@@ -77,7 +77,10 @@ function pushAttendance() {
     })
     .then(response => response.json())
     .then(data => alert(data.message))
-    .catch(error => alert('Error: ' + error));
+    .catch(error => {
+        console.log(error);
+        alert('Error: ' + error);
+    });
 }
 
 function loadCourses() {
@@ -122,7 +125,10 @@ function updateGrades() {
     })
     .then(response => response.json())
     .then(data => alert(data.message))
-    .catch(error => alert('Error: ' + error));
+    .catch(error => {
+        console.log(error);
+        alert('Error: ' + error);
+    });
 }
 
 // Load courses when page loads
