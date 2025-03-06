@@ -1,6 +1,9 @@
 # Google Classroom and Sheets Integration API
 
-This Flask application provides a set of APIs to interact with Google Classroom and Google Sheets specifically designed for the XParky points in the GDG-Web-development classroom, allowing to fetch data, manage coursework, student submissions, and update grades.
+This Flask application provides a set of APIs to interact with Google Classroom and Google Sheets specifically designed for the XParky points in the GDG-Web-development classroom, allowing to fetch data, manage coursework, student submissions, and update grades Automatically.
+
+This is Integrated to this website:
+https://gdg-exp-website.vercel.app/?fbclid=IwY2xjawI2XkdleHRuA2FlbQIxMAABHca6X0DaBRDbzvOOwhS63h4SjltMxjD5d4o1AG7W3yRLnsPw2F4bKjRW4Q_aem_e5eqApKzRCm6kcJqS8MKXQ
 
 ## Features
 
